@@ -2,7 +2,7 @@
 from core.extractor import extract_itr_parameters, display_results, save_results
 
 # ── Put your test PDF inside the documents/ folder ──
-files = ["documents/form16.pdf"]
+files = ["testCases/Form16.pdf"]
 
 if __name__ == "__main__":
     print("=" * 50)

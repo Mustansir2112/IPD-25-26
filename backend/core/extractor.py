@@ -1,7 +1,17 @@
 from dotenv import load_dotenv
 import os
-
+import json
+import re
+import io
+import fitz                 # PyMuPDF
+import pdfplumber
+import numpy as np
+import easyocr
+from pathlib import Path
+from PIL import Image
+from groq import Groq
 load_dotenv()
+
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL   = "llama-3.3-70b-versatile"
 
@@ -214,99 +224,26 @@ def query_groq(raw_text: str) -> dict:
         print(raw_out[:600])
         return {p: None for p in PARAMETERS}
 
-SYSTEM_PROMPT = """You are an expert Indian income tax document parser.
-Extract specific financial parameters from raw text taken from documents
-like Form 16, bank statements, salary slips, and Form 26AS.
+SUMMABLE = {
+    "tds_salary", "tds_bank", "advance_tax", "self_assessment_tax",
+    "deduction_80C", "deduction_80D", "deduction_80G", "capital_gains"
+}
 
-The text may contain OCR noise, inconsistent spacing, or merged columns.
-Reason carefully through ambiguous values.
-
-Respond with ONLY a valid JSON object. No markdown, no explanation."""
-
-
-def build_prompt(raw_text: str) -> str:
-    return f"""Extract the following 22 parameters from the document text.
-
-PARAMETERS:
-- name                  : Full taxpayer/employee name (string)
-- pan                   : PAN — 10 chars uppercase e.g. ABCDE1234F (string)
-- age                   : Age as integer. Compute from DOB if needed (integer)
-- gross_salary          : Gross salary u/s 17(1) in INR (integer)
-- basic_salary          : Basic salary component in INR (integer)
-- hra_received          : House Rent Allowance received in INR (integer)
-- rent_paid             : Actual rent paid in INR (integer)
-- other_allowances      : Other allowances (LTA, special etc.) in INR (integer)
-- standard_deduction    : Standard deduction u/s 16 — usually 50000 or 75000 (integer)
-- capital_gains         : Total capital gains in INR (integer)
-- house_property_income : Net house property income — can be negative (integer)
-- business_income       : Business/profession income in INR (integer)
-- other_income          : Other sources income (interest, dividends) in INR (integer)
-- deduction_80C         : Section 80C deductions, max 150000 (integer)
-- deduction_80D         : Section 80D health insurance deduction (integer)
-- deduction_80G         : Section 80G donation deduction (integer)
-- interest_on_home_loan : Home loan interest u/s 24(b) in INR (integer)
-- tds_salary            : TDS on salary in INR (integer)
-- tds_bank              : TDS on bank interest in INR (integer)
-- advance_tax           : Advance tax paid in INR (integer)
-- self_assessment_tax   : Self-assessment tax paid in INR (integer)
-- regime                : Exactly "old" or "new". Use "new" if doc mentions
-                          New Tax Regime or 115BAC. Default "old" if unclear.
-
-RULES:
-1. Return ONLY a JSON object with exactly these 22 keys.
-2. Use null for fields not found — never guess or hallucinate.
-3. Monetary values as plain integers — strip commas and ₹ symbol.
-   Example: 1,20,000 → 120000
-4. If a field appears multiple times, use the final/summary figure.
-
-DOCUMENT TEXT:
-\"\"\"
-{raw_text}
-\"\"\"
-
-JSON:"""
-
-
-def query_groq(raw_text: str) -> dict:
-    """
-    Sends extracted text to Groq and parses the JSON response.
-    Truncates text if it exceeds safe context window size.
-    """
-    client = Groq(api_key=GROQ_API_KEY)
-
-    # Stay well within 128k context — 48k chars ≈ ~12k tokens
-    MAX_CHARS = 48_000
-    if len(raw_text) > MAX_CHARS:
-        print(f"  ⚠️  Text truncated {len(raw_text):,} → {MAX_CHARS:,} chars")
-        raw_text = raw_text[:MAX_CHARS]
-
-    print(f"\n🤖 Sending {len(raw_text):,} chars to Groq ({GROQ_MODEL})...")
-
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        temperature=0.0,     # deterministic — facts only, no creativity
-        max_tokens=1024,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": build_prompt(raw_text)},
-        ]
-    )
-
-    raw_out = response.choices[0].message.content.strip()
-
-    # Strip markdown fences just in case
-    raw_out = re.sub(r"^```[a-z]*\n?", "", raw_out)
-    raw_out = re.sub(r"\n?```$",        "", raw_out)
-
-    try:
-        result = json.loads(raw_out)
-        found  = sum(1 for v in result.values() if v is not None)
-        print(f"  ✅  {found}/22 fields extracted by Groq")
-        return result
-    except json.JSONDecodeError:
-        print("  ❌  JSON parse failed. Groq raw output:")
-        print(raw_out[:600])
-        return {p: None for p in PARAMETERS}
+def merge_results(results: list) -> dict:
+    merged = {p: None for p in PARAMETERS}
+    for res in results:
+        for key in PARAMETERS:
+            val = res.get(key)
+            if val is None:
+                continue
+            if merged[key] is None:
+                merged[key] = val
+            elif key in SUMMABLE:
+                try:
+                    merged[key] = int(merged[key]) + int(val)
+                except (TypeError, ValueError):
+                    pass
+    return merged
 
 def extract_itr_parameters(file_paths: list) -> dict:
     """
@@ -315,8 +252,8 @@ def extract_itr_parameters(file_paths: list) -> dict:
     Pass multiple files (Form 16 + bank statement etc.) for
     better coverage across all 22 parameters.
     """
-    if GROQ_API_KEY == "your-groq-api-key-here":
-        raise ValueError("Set your GROQ_API_KEY in Cell 3 first.")
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY not set. Check your .env file.")
 
     all_results = []
 
@@ -376,3 +313,9 @@ def display_results(result: dict):
     print(f"\n{'═'*52}")
     print(f"  ✅  {found}/22 parameters extracted")
     print("═"*52)
+
+def save_results(result: dict, path: str = "output/itr_extracted.json"):
+    os.makedirs("output", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
+    print(f"\n💾  Saved → {path}")
