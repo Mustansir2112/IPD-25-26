@@ -22,7 +22,10 @@ PARAMETERS = [
     "capital_gains", "house_property_income", "business_income", "other_income",
     "deduction_80C", "deduction_80D", "deduction_80G", "interest_on_home_loan",
     "tds_salary", "tds_bank", "advance_tax", "self_assessment_tax",
-    "regime"
+    "regime",
+    "deduction_80CCD1B",
+    "deduction_80TTA",
+    "employer_pf"
 ]
 
 print("Loading EasyOCR... (downloads ~100 MB model on first run)")
@@ -141,7 +144,7 @@ Respond with ONLY a valid JSON object. No markdown, no explanation."""
 
 
 def build_prompt(raw_text: str) -> str:
-    return f"""Extract the following 22 parameters from the document text.
+    return f"""Extract the following 25 parameters from the document text.
 
 PARAMETERS:
 - name                  : Full taxpayer/employee name (string)
@@ -167,6 +170,9 @@ PARAMETERS:
 - self_assessment_tax   : Self-assessment tax paid in INR (integer)
 - regime                : Exactly "old" or "new". Use "new" if doc mentions
                           New Tax Regime or 115BAC. Default "old" if unclear.
+- deduction_80CCD1B      : Additional NPS deduction u/s 80CCD(1B), max 50000 (integer)
+- deduction_80TTA        : Savings account interest deduction u/s 80TTA, max 10000 (integer)
+- employer_pf            : Employer contribution to provident fund in INR (integer)
 
 RULES:
 1. Return ONLY a JSON object with exactly these 22 keys.
@@ -226,7 +232,9 @@ def query_groq(raw_text: str) -> dict:
 
 SUMMABLE = {
     "tds_salary", "tds_bank", "advance_tax", "self_assessment_tax",
-    "deduction_80C", "deduction_80D", "deduction_80G", "capital_gains"
+    "deduction_80C", "deduction_80D", "deduction_80G",
+    "deduction_80CCD1B", "deduction_80TTA",
+    "capital_gains"
 }
 
 def merge_results(results: list) -> dict:
@@ -281,12 +289,22 @@ def extract_itr_parameters(file_paths: list) -> dict:
 def display_results(result: dict):
     SECTIONS = {
         "👤 Personal":      ["name", "pan", "age"],
-        "💼 Salary":        ["gross_salary", "basic_salary", "hra_received",
-                              "rent_paid", "other_allowances", "standard_deduction"],
+        "💼 Salary": [
+    "gross_salary", "basic_salary", "hra_received",
+    "rent_paid", "other_allowances",
+    "employer_pf",
+    "standard_deduction"
+],
         "💰 Other Income":  ["capital_gains", "house_property_income",
                               "business_income", "other_income"],
-        "🏷️  Deductions":    ["deduction_80C", "deduction_80D", "deduction_80G",
-                              "interest_on_home_loan"],
+        "🏷️  Deductions": [
+    "deduction_80C",
+    "deduction_80D",
+    "deduction_80G",
+    "deduction_80CCD1B",
+    "deduction_80TTA",
+    "interest_on_home_loan"
+],
         "🏦 Tax Paid":      ["tds_salary", "tds_bank", "advance_tax",
                               "self_assessment_tax"],
         "📋 Filing":        ["regime"],
