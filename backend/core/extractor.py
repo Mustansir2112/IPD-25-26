@@ -91,8 +91,21 @@ def extract_text_scanned(pdf_path: str, dpi: int = 250) -> str:
     for page_num in range(len(doc)):
         page = doc[page_num]
         mat  = fitz.Matrix(dpi / 72, dpi / 72)
-        pix  = page.get_pixmap(matrix=mat)
-        img  = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+        # render page to image, but MuPDF sometimes chokes on malformed
+        # JPEG streams ("Not a JPEG file" errors). In that case fall back to
+        # pdfplumber rendering which is generally more forgiving.
+        try:
+            pix  = page.get_pixmap(matrix=mat)
+            img  = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        except Exception as exc:  # broad because fitz raises RuntimeError
+            print(f"  ⚠️  Rendering page {page_num+1} via MuPDF failed: {exc}")
+            print("      Attempting fallback rendering with pdfplumber")
+            with pdfplumber.open(pdf_path) as pdf2:
+                page2 = pdf2.pages[page_num]
+                # pdfplumber's to_image uses pillow internally
+                pil_img = page2.to_image(resolution=dpi).original
+                img = pil_img.convert("RGB")
 
         # EasyOCR returns: [ [bbox, text, confidence], ... ]
         results = ocr_reader.readtext(np.array(img))
