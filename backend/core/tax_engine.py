@@ -494,7 +494,7 @@ def print_tax_summary(result: dict):
         return f"{'N/A':>15}"
 
     print("\n" + "═" * 66)
-    print("    🧮  TAX CALCULATION SUMMARY  —  FY 2025-26")
+    print("TAX CALCULATION SUMMARY  —  FY 2025-26")
     print("═" * 66)
     print(f"  Name            : {tp['name']}")
     print(f"  PAN             : {tp['pan']}")
@@ -525,7 +525,7 @@ def print_tax_summary(result: dict):
     ]
 
     print(f"\n  {'':34} {'OLD REGIME':>15}  {'NEW REGIME':>15}")
-    print("  " + "─" * 66)
+    # print("  " + "─" * 66)
 
     for label, o_val, n_val in rows:
         if label.startswith("─"):
@@ -537,9 +537,9 @@ def print_tax_summary(result: dict):
         print(f"{marker}{label:<34} {o_str}  {n_str}")
 
     # Final tax — highlighted
-    print("  " + "═" * 66)
+    # print("  " + "═" * 66)
     print(f"  ★ {'FINAL TAX LIABILITY':<33} {fmt(old['final_tax'])}  {fmt(new['final_tax'])}")
-    print("  " + "═" * 66)
+    # print("  " + "═" * 66)
 
     # TDS Reconciliation
     o_r = old["tds_reconciliation"]
@@ -550,6 +550,6 @@ def print_tax_summary(result: dict):
     print(f"  {'Status':<34} {o_r['status']:>15}  {n_r['status']:>15}")
 
     # Recommendation
-    print(f"\n{'═' * 66}")
-    print(f"  💡  RECOMMENDATION: {rec['message']}")
-    print(f"{'═' * 66}\n")
+    # print(f"\n{'═' * 66}")
+    print(f"RECOMMENDATION: {rec['message']}")
+    # print(f"{'═' * 66}\n")

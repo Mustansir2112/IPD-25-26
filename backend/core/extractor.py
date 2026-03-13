@@ -282,7 +282,7 @@ def extract_itr_parameters(file_paths: list) -> dict:
         raw_text = extract_raw_text(fp)
 
         if not raw_text.strip():
-            print(f"  ⚠️  No text extracted from {fp} — skipping")
+            print(f"No text extracted from {fp} — skipping")
             continue
 
         extracted = query_groq(raw_text)
@@ -301,16 +301,16 @@ def extract_itr_parameters(file_paths: list) -> dict:
 
 def display_results(result: dict):
     SECTIONS = {
-        "👤 Personal":      ["name", "pan", "age"],
-        "💼 Salary": [
+        "Personal":      ["name", "pan", "age"],
+        "Salary": [
     "gross_salary", "basic_salary", "hra_received",
     "rent_paid", "other_allowances",
     "employer_pf",
     "standard_deduction"
 ],
-        "💰 Other Income":  ["capital_gains", "house_property_income",
+        "Other Income":  ["capital_gains", "house_property_income",
                               "business_income", "other_income"],
-        "🏷️  Deductions": [
+        "Deductions": [
     "deduction_80C",
     "deduction_80D",
     "deduction_80G",
@@ -318,14 +318,15 @@ def display_results(result: dict):
     "deduction_80TTA",
     "interest_on_home_loan"
 ],
-        "🏦 Tax Paid":      ["tds_salary", "tds_bank", "advance_tax",
+        "Tax Paid":      ["tds_salary", "tds_bank", "advance_tax",
                               "self_assessment_tax"],
-        "📋 Filing":        ["regime"],
+        "Filing":        ["regime"],
     }
 
-    print("\n" + "═"*52)
-    print("    📊  EXTRACTED ITR PARAMETERS")
-    print("═"*52)
+    # print("\n" + "═"*52)
+    print("\n📊 Extracted ITR Parameters")
+    # print("EXTRACTED ITR PARAMETERS")
+    # print("═"*52)
 
     for section, keys in SECTIONS.items():
         print(f"\n{section}")
@@ -342,7 +343,7 @@ def display_results(result: dict):
 
     found = sum(1 for v in result.values() if v is not None)
     print(f"\n{'═'*52}")
-    print(f"  ✅  {found}/22 parameters extracted")
+    print(f"{found}/22 parameters extracted")
     print("═"*52)
 
 def save_results(result: dict, path: str = "output/itr_extracted.json"):
